@@ -1,90 +1,70 @@
-import sqlite3
 import re
 
 class AIAgent:
     def __init__(self, db, blocker):
         self.db = db
         self.blocker = blocker
+        self.last_target_ip = None  # Sonuncu əlaqəli IP-ni yadda saxlayır
 
-    def process_command(self, user_input):
-        command = user_input.lower().strip()
+    def process_command(self, command):
+        cmd = command.lower().strip()
 
-        # 1. Nəzakət və Hal-Əhval Sorğuları
-        if any(w in command for w in ["salam", "salamlar", "hello", "hi"]):
-            return (
-                "🤖 SI: Salam! Mən avtonom Blue Team müdafiə agentinizəm.\n"
-                "   Canlı logları izləyir və zərərli IP-ləri bloklayıram. Sizə necə kömək edə bilərəm?"
-            )
-        elif any(w in command for w in ["necesen", "neceksen", "necəsən", "ne var ne yox", "nə var nə yox"]):
-            return "🤖 SI: Mən bir AI agentəm, sistem resurslarım tam qaydasındadır və canlı izləmədəyəm! Sizdə vəziyyət necədir?"
+        # Command icrasından əvvəl IP ünvanını tapırıq
+        ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', command)
+        found_ip = ip_match.group(1) if ip_match else None
 
-        # 2. Sistem İş Prinsipi / İzahlar
-        elif any(w in command for w in ["nece etdin", "necə etdin", "nece isleyir", "necə işləyir", "nece tutdun", "necə tutdun", "haqqinda"]):
-            return (
-                "🔍 SI İş Prinsipi:\n"
-                "  1. LogMonitor: Web serverin 'access.log' faylını real-vaxtda oxuyur.\n"
-                "  2. PayloadAnalyzer: Regex vasitəsilə SQLi, XSS və zərərli parametrləri tapır.\n"
-                "  3. ThreatIntel & Blocker: VirusTotal reputasiyasını yoxlayıb IP-ni 'iptables' vasitəsilə bloklayır.\n"
-                "  4. KnowledgeBase: Bütün bu prosesləri SQLite bazasında arxivləyir."
-            )
+        # Əgər əmrdə IP varsa, onu dərhal kontekst yaddaşına yazırıq
+        if found_ip:
+            self.last_target_ip = found_ip
 
-        # 3. Sistem Vəziyyəti / Status
-        elif any(w in command for w in ["status", "veziyyet", "vəziyyət", "sistem", "isleyir", "işləyir"]):
-            conn = sqlite3.connect(self.db.db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM threats")
-            total = cursor.fetchone()[0]
-            cursor.execute("SELECT COUNT(*) FROM threats WHERE blocked=1")
-            blocked = cursor.fetchone()[0]
-            conn.close()
-            return (
-                f"📊 SI Sistem Hesabatı:\n"
-                f"  • Log Monitorinqi: Aktiv 🟢\n"
-                f"  • Qeydə alınan hücumlar: {total}\n"
-                f"  • Bloklanan IP-lər: {blocked}\n"
-                f"  • Bazanın vəziyyəti: Qaydasındadır"
-            )
-
-        # 4. Hücumların Və Logların Siyahısı
-        elif any(w in command for w in ["hucum", "hücum", "tehdid", "təhdid", "log", "siyahı", "siyahi", "son", "baxim", "baxım"]):
-            conn = sqlite3.connect(self.db.db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT ip, threat_type, timestamp, blocked FROM threats ORDER BY id DESC LIMIT 5")
-            rows = cursor.fetchall()
-            conn.close()
-
-            if not rows:
-                return "🤖 SI: Bazada hələ ki heç bir təhdid qeydə alınmayıb. Server təmizdir!"
+        # 1. Hücum xülasəsi və statistikalar
+        if any(w in cmd for w in ["hücum", "hucum", "stat", "log", "siyahı", "siyahi"]) or cmd == "h":
+            threats = self.db.get_all_threats()
+            if not threats:
+                return "[🤖 AI Agent]: Hələ ki heç bir hücum qeydə alınmayıb."
             
-            res = "🚨 SI: Son aşkar edilən hücumlar:\n"
-            for r in rows:
-                status = "🛡️ Bloklandı" if r[3] == 1 else "⚠️ Təsbit edildi"
-                res += f"  • [{r[2]}] IP: {r[0]} | Növ: {r[1]} | Status: {status}\n"
+            res = f"[🤖 AI Agent]: Ümumi {len(threats)} təhdid qeydə alınıb:\n"
+            res += "-" * 50 + "\n"
+            for t in threats[-5:]:
+                res += f"📌 ID: {t[0]} | IP: {t[1]} | Növ: {t[2]} | VT: {t[4]} | Bloklanıb: {'Bəli' if t[5] else 'Xeyr'}\n"
             return res
 
-        # 5. Dinamik IP Bloklama Əmri
-        elif any(w in command for w in ["blokla", "block", "ban", "qadağan"]):
-            ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', command)
-            if ip_match:
-                ip = ip_match.group(1)
-                self.blocker.block_ip(ip)
-                return f"🛡️ SI: {ip} ünvanı dərhal müdafiə sisteminə ötürüldü və bloklandı."
-            return "⚠️ SI: Əmrdə keçərli bir IP ünvanı tapılmadı (Məsələn: '1.2.3.4 IP-ni blokla')."
+        # 2. IP Blokdan çıxarma əmri (Bütün hərf variantları)
+        unblock_keywords = ["unblock", "çıxart", "cixart", "çixart", "sil", "qaldır", "qaldir", "cixard", "çıxard"]
+        if any(w in cmd for w in unblock_keywords):
+            target_ip = found_ip or self.last_target_ip
+            
+            if not target_ip:
+                # Əgər yaddaşda da IP yoxdursa, bazadan son bloklanan IP-ni götürürük
+                threats = self.db.get_all_threats()
+                if threats:
+                    target_ip = threats[-1][1] # Son təhdid IP-si
 
-        # 6. Kömək / Təlimat
-        elif any(w in command for w in ["komek", "kömək", "help", "ne ede bilersen", "nə edə bilərsən"]):
-            return (
-                "💡 SI Agent İdarəetmə Komandaları:\n"
-                "  1. 'salam' / 'necesen' - Agent ilə əlaqə qurmaq\n"
-                "  2. 'status' / 'necə etdin' - Sistem vəziyyəti və iş prinsipi\n"
-                "  3. 'hücumlar' - Son aşkar edilən təhdidlər\n"
-                "  4. '<IP> blokla' - Göstərilən IP-ni dərhal firewall-a əlavə etmək\n"
-                "  5. 'exit' - Çat rejimindən çıxmaq"
-            )
+            if target_ip:
+                success = self.blocker.unblock_ip(target_ip)
+                if success:
+                    res_ip = target_ip
+                    self.last_target_ip = None
+                    return f"[🤖 AI Agent]: {res_ip} ünvanı uğurla blokdan çıxarıldı!"
+                else:
+                    return f"[🤖 AI Agent]: {target_ip} ünvanını blokdan çıxararkən xəta baş verdi."
+            else:
+                return "[🤖 AI Agent]: Blokdan çıxarmaq üçün aktiv IP tapılmadı. IP ünvanını qeyd edin."
 
-        # Standart Cavab
-        else:
-            return (
-                "🤖 SI: Bu əmri tam anlayamadım. Mənimlə nəzakətlə danışa, 'status' və ya 'hücumlar' sorğulaya,\n"
-                "   yaxud da 'necə etdin' yazaraq iş prinsipimi öyrənə bilərsiniz. Təlimat üçün 'kömək' yazın."
-            )
+        # 3. Manuel IP Bloklama əmri
+        if any(w in cmd for w in ["blokla", "block", "ban"]):
+            target_ip = found_ip or self.last_target_ip
+            if target_ip:
+                self.blocker.block_ip(target_ip)
+                return f"[🤖 AI Agent]: {target_ip} ünvanı manuəl olaraq bloklandı."
+            else:
+                return "[🤖 AI Agent]: Lütfən bloklamaq istədiyiniz IP ünvanını qeyd edin."
+
+        # 4. İstifadəçi TƏKCƏ BİR IP yazdıqda (Məsələn: "192.168.1.100")
+        if found_ip and len(cmd.split()) == 1:
+            if found_ip in self.blocker.blocked_ips:
+                return f"[🤖 AI Agent]: {found_ip} bloklanıb. Blokdan çıxarmaq üçün sadəcə 'çıxart' yazın."
+            else:
+                return f"[🤖 AI Agent]: {found_ip} üçün nə etmək istəyirsiniz?\n - Bloklamaq üçün: 'blokla'\n - Blokdan çıxarmaq üçün: 'çıxart'"
+
+        return "[🤖 AI Agent]: Anlamadım.\nİstifadə qaydası:\n • 'hücumlar'\n • 'çıxart' (son IP-ni blokdan çıxarır)\n • '192.168.1.100 blokla'\n • '192.168.1.100 çıxart'"

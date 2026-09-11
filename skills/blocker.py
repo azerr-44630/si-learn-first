@@ -1,34 +1,36 @@
-import subprocess
 import os
+import subprocess
 
 class FirewallBlocker:
     def __init__(self):
         self.blocked_ips = set()
 
-    def block_ip(self, ip_address):
-        """IP ünvanını firewall vasitəsilə bloklayır."""
-        if ip_address in self.blocked_ips:
+    def block_ip(self, ip):
+        if ip in self.blocked_ips:
+            return True
+        try:
+            # Linux iptables vasitəsilə bloklama
+            cmd = f"sudo iptables -A INPUT -s {ip} -j DROP"
+            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.blocked_ips.add(ip)
+            print(f" -> [FIREWALL] {ip} uğurla bloklandı (iptables).")
+            return True
+        except Exception:
+            # İcazə olmasa və ya xəta baş versə simulyasiya edirik
+            self.blocked_ips.add(ip)
+            print(f" -> [FIREWALL Simulyasiya] {ip} bloklandı listinə əlavə edildi.")
             return True
 
-        # Təhlükəsiz IP-ləri bloklamamaq üçün ağ siyahı (whitelist)
-        if ip_address in ["127.0.0.1", "8.8.8.8"]:
-            return False
-
+    def unblock_ip(self, ip):
         try:
-            # Linux iptables əmri ilə bloklama
-            cmd = f"iptables -A INPUT -s {ip_address} -j DROP"
-            result = subprocess.run(["su", "-c", cmd], capture_output=True, text=True, timeout=5)
-            
-            if result.returncode == 0:
-                self.blocked_ips.add(ip_address)
-                print(f"[🛡️ BLOCK] IP uğurla firewall-da bloklandı: {ip_address}")
-                return True
-            else:
-                # Root icazəsi yoxdursa emulyasiya rejimi
-                self.blocked_ips.add(ip_address)
-                print(f"[🛡️ SIMULATED BLOCK] IP blok siyahısına salındı (Simulyasiya): {ip_address}")
-                return True
-        except Exception as e:
-            self.blocked_ips.add(ip_address)
-            print(f"[🛡️ SIMULATED BLOCK] {ip_address} bloklandı (Xəta: {e})")
+            cmd = f"sudo iptables -D INPUT -s {ip} -j DROP"
+            subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if ip in self.blocked_ips:
+                self.blocked_ips.remove(ip)
+            print(f" -> [FIREWALL] {ip} blokdan çıxarıldı (iptables).")
+            return True
+        except Exception:
+            if ip in self.blocked_ips:
+                self.blocked_ips.remove(ip)
+            print(f" -> [FIREWALL Simulyasiya] {ip} bloklanmışlar siyahısından çıxarıldı.")
             return True
