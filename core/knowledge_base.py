@@ -2,20 +2,35 @@ import sqlite3
 import os
 
 class KnowledgeBase:
-    def __init__(self):
-        self.db_path = 'data/knowledge.db'
-        os.makedirs('data', exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path)
-        self.setup_tables()
+    def __init__(self, db_path="knowledge.db"):
+        self.db_path = db_path
+        self._init_db()
 
-    def setup_tables(self):
-        cursor = self.conn.cursor()
+    def _init_db(self):
+        """Baza cədvəlini yaradır."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS findings (
+            CREATE TABLE IF NOT EXISTS threats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source TEXT,
-                data TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ip TEXT,
+                threat_type TEXT,
+                raw_log TEXT,
+                vt_malicious INTEGER,
+                blocked INTEGER DEFAULT 0
             )
         ''')
-        self.conn.commit()
+        conn.commit()
+        conn.close()
+
+    def log_threat(self, ip, threat_type, raw_log, vt_malicious=0, blocked=0):
+        """Hücum məlumatını bazaya daxil edir."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO threats (ip, threat_type, raw_log, vt_malicious, blocked)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (ip, threat_type, raw_log, vt_malicious, blocked))
+        conn.commit()
+        conn.close()

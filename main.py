@@ -5,15 +5,15 @@ from dotenv import load_dotenv
 from core.ui import TerminalUI
 from core.analyzer import PayloadAnalyzer
 from core.log_monitor import LogMonitor
+from core.knowledge_base import KnowledgeBase
 from skills.threat_intel import ThreatIntel
+from skills.blocker import FirewallBlocker
 
 load_dotenv()
 
 def simulate_attacks(log_file):
-    """Sistemi test etmək üçün log faylına avtomatik zərərli sorğular yazır."""
     time.sleep(2)
     sample_logs = [
-        '192.168.1.50 - - [11/Sep/2026:17:45:10] "GET /index.php HTTP/1.1" 200 1024',
         '45.33.32.156 - - [11/Sep/2026:17:45:12] "GET /login?user=admin\'%20OR%201=1-- HTTP/1.1" 401 512',
         '185.220.101.5 - - [11/Sep/2026:17:45:15] "GET /search?q=<script>alert(1)</script> HTTP/1.1" 200 2048'
     ]
@@ -29,14 +29,14 @@ def main():
 
     intel = ThreatIntel()
     analyzer = PayloadAnalyzer()
+    db = KnowledgeBase()
+    blocker = FirewallBlocker()
+    
     log_path = "logs/access.log"
 
-    monitor = LogMonitor(log_path, analyzer, intel)
+    monitor = LogMonitor(log_path, analyzer, intel, db, blocker)
 
-    # Test simulyasiyasını arxa fonda işə salırıq
     threading.Thread(target=simulate_attacks, args=(log_path,), daemon=True).start()
-
-    # Canlı izləməni başladırıq
     monitor.start_monitoring()
 
 if __name__ == "__main__":
