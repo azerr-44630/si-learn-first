@@ -1,10 +1,27 @@
 import os
+import threading
+import time
 from dotenv import load_dotenv
 from core.ui import TerminalUI
 from core.analyzer import PayloadAnalyzer
+from core.log_monitor import LogMonitor
 from skills.threat_intel import ThreatIntel
 
 load_dotenv()
+
+def simulate_attacks(log_file):
+    """Sistemi test etmək üçün log faylına avtomatik zərərli sorğular yazır."""
+    time.sleep(2)
+    sample_logs = [
+        '192.168.1.50 - - [11/Sep/2026:17:45:10] "GET /index.php HTTP/1.1" 200 1024',
+        '45.33.32.156 - - [11/Sep/2026:17:45:12] "GET /login?user=admin\'%20OR%201=1-- HTTP/1.1" 401 512',
+        '185.220.101.5 - - [11/Sep/2026:17:45:15] "GET /search?q=<script>alert(1)</script> HTTP/1.1" 200 2048'
+    ]
+    with open(log_file, 'a') as f:
+        for log in sample_logs:
+            f.write(log + '\n')
+            f.flush()
+            time.sleep(3)
 
 def main():
     ui = TerminalUI()
@@ -12,28 +29,15 @@ def main():
 
     intel = ThreatIntel()
     analyzer = PayloadAnalyzer()
+    log_path = "logs/access.log"
 
-    # 1. IP Reputasiya Testi
-    target_ip = "8.8.8.8"
-    print(f"\n[1] IP Analizi: {target_ip}")
-    res = intel.check_ip(target_ip)
-    if res.get("status") == "success":
-        print(f"    [+] Zərərli: {res['malicious']} | Təhlükəsiz: {res['harmless']}")
+    monitor = LogMonitor(log_path, analyzer, intel)
 
-    # 2. Payload Analiz Testi (Test üçün zərərli sorğular)
-    test_payloads = [
-        "admin' OR 1=1 --",
-        "<script>alert('XSS')</script>",
-        "user_id=125&name=almas"
-    ]
+    # Test simulyasiyasını arxa fonda işə salırıq
+    threading.Thread(target=simulate_attacks, args=(log_path,), daemon=True).start()
 
-    print("\n[2] Sorğu (Payload) Analizi Testləri:")
-    for p in test_payloads:
-        result = analyzer.analyze_payload(p)
-        if result["status"] == "threat_detected":
-            print(f"    [!] TƏHDİD TAPILDI -> '{p}' | Tür: {', '.join(result['threats'])}")
-        else:
-            print(f"    [✓] Təmiz -> '{p}'")
+    # Canlı izləməni başladırıq
+    monitor.start_monitoring()
 
 if __name__ == "__main__":
     main()
