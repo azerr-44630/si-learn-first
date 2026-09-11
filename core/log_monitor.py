@@ -30,7 +30,7 @@ class LogMonitor:
         ip_match = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', line)
         if ip_match:
             ip = ip_match.group(1)
-            analysis = self.analyzer.analyze_payload(line)
+            analysis = self.analyzer.analyze_payload(line, ip=ip)
             
             if analysis["status"] == "threat_detected":
                 threat_type = ', '.join(analysis['threats'])
@@ -41,10 +41,8 @@ class LogMonitor:
                 vt_res = self.intel.check_ip(ip)
                 vt_malicious = vt_res.get('malicious', 0) if vt_res.get("status") == "success" else 0
                 
-                # Avto-Bloklama
                 is_blocked = self.blocker.block_ip(ip)
                 
-                # SQLite Bazasına Yazmaq
                 self.db.log_threat(
                     ip=ip,
                     threat_type=threat_type,
