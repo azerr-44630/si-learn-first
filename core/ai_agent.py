@@ -1,7 +1,9 @@
 import os
 import re
+import json
 from skills.script_writer import ScriptWriter
 from skills.scanner import CodeScanner
+from skills.fixer import CodeFixer
 
 class AIAgent:
     def __init__(self, db, blocker):
@@ -9,6 +11,7 @@ class AIAgent:
         self.blocker = blocker
         self.writer = ScriptWriter()
         self.scanner = CodeScanner()
+        self.fixer = CodeFixer()
         self.last_target_ip = None
 
     def process_command(self, command):
@@ -22,7 +25,6 @@ class AIAgent:
 
         # 1. Statik Kod və Təhlükəsizlik Skaneri (SI-GUARD Scanner)
         if any(w in cmd for w in ["skan", "scan", "zeiflik", "zəiflik", "scanner", "github.com"]):
-            # GitHub URL-ini axtarırıq
             github_match = re.search(r'https?://github\.com/[^\s]+', command)
             
             is_github = False
@@ -55,10 +57,9 @@ class AIAgent:
 
             report_file = self.scanner.save_json_report(findings, files)
 
-            if is_github:
-                self.scanner.cleanup_temp()
-
             if not findings:
+                if is_github:
+                    self.scanner.cleanup_temp()
                 return (
                     f"🛡️ [🤖 SI-GUARD Scanner]: Skan tamamlandı!\n"
                     f"📁 Taranan fayllar ({len(files)}): {', '.join([os.path.basename(f) for f in files])}\n"
@@ -76,11 +77,25 @@ class AIAgent:
                 res += f"   💡 Təklif: {f.recommendation}\n\n"
 
             if len(findings) > 5:
-                res += f"⚠️ Və daha {len(findings) - 5} təhdid... Bütün detallar `{report_file}` faylına yazıldı."
+                res += f"⚠️ Və daha {len(findings) - 5} təhdid... Bütün detallar `{report_file}` faylına yazıldı.\n"
 
+            res += "\n💡 Zəiflikləri avtomatik düzəltmək üçün 'düzəlt' əmrini verin."
             return res
 
-        # 2. Skript Və Kod Yazma Əmri
+        # 2. Avtomatik Zəiflik Düzəltmə (Fixer)
+        if any(w in cmd for w in ["düzəlt", "duzelt", "fix", "patch"]):
+            report_path = "scan_report.json"
+            if not os.path.exists(report_path):
+                return "⚠️ [🤖 SI-GUARD Fixer]: Hesabat faylı (`scan_report.json`) tapılmadı. Əvvəlcə 'skan' əmrini icra edin."
+            
+            try:
+                with open(report_path, "r", encoding="utf-8") as rf:
+                    report_data = json.load(rf)
+                return self.fixer.apply_fixes(report_data)
+            except Exception as e:
+                return f"❌ [🤖 SI-GUARD Fixer]: Düzəliş zamanı xəta baş verdi: {str(e)}"
+
+        # 3. Skript Və Kod Yazma Əmri
         if any(w in cmd for w in ["skript", "script", "kod", "kod yaz", "skript yaz"]):
             code, filename = self.writer.generate_script(cmd)
             return (
@@ -90,7 +105,7 @@ class AIAgent:
                 f"💡 Bu skripti istifadə etmək üçün terminalda `cat > {filename}` əmri ilə yaddaşa yaza bilərsiniz."
             )
 
-        # 3. Hücum xülasəsi
+        # 4. Hücum xülasəsi
         if any(w in cmd for w in ["hücum", "hucum", "stat", "log", "siyahı", "siyahi"]) or cmd == "h":
             threats = self.db.get_all_threats()
             if not threats:
@@ -102,7 +117,7 @@ class AIAgent:
                 res += f"📌 ID: {t[0]} | IP: {t[1]} | Növ: {t[2]} | VT: {t[4]} | Bloklanıb: {'Bəli' if t[5] else 'Xeyr'}\n"
             return res
 
-        # 4. IP Blokdan çıxarma əmri
+        # 5. IP Blokdan çıxarma əmri
         unblock_keywords = ["unblock", "çıxart", "cixart", "çixart", "sil", "qaldır", "qaldir", "cixard", "çıxard"]
         if any(w in cmd for w in unblock_keywords):
             target_ip = found_ip or self.last_target_ip
@@ -122,7 +137,7 @@ class AIAgent:
             else:
                 return "[🤖 AI Agent]: Blokdan çıxarmaq üçün aktiv IP tapılmadı."
 
-        # 5. Manuel IP Bloklama əmri
+        # 6. Manuel IP Bloklama əmri
         if any(w in cmd for w in ["blokla", "block", "ban"]):
             target_ip = found_ip or self.last_target_ip
             if target_ip:
@@ -134,8 +149,8 @@ class AIAgent:
         return (
             "[🤖 AI Agent]: Anlamadım.\n"
             "İstifadə qaydası:\n"
-            " • 'skan https://github.com/istifadeci/repo'\n"
-            " • 'skan server.js'\n"
+            " • 'skan <path/url>'\n"
+            " • 'düzəlt' (son skan nəticəsindəki zəiflikləri yamayır)\n"
             " • 'skript yaz'\n"
             " • 'hücumlar'"
         )
