@@ -1,8 +1,7 @@
 {
-  "generated_at": "2026-09-11T18:23:56.510385+00:00",
+  "generated_at": "2026-09-13T13:45:30.690211+00:00",
   "scanned_files": [
-    "../azerbrawl-backend/db.js",
-    "../azerbrawl-backend/server.js"
+    "./output_report.html"
   ],
   "total_findings": 0,
   "findings": []
