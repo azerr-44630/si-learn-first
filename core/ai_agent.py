@@ -8,6 +8,7 @@ from skills.dependency_checker import DependencyChecker
 from skills.env_auditor import EnvAuditor
 from skills.report_generator import ReportGenerator
 from skills.knowledge_base import KnowledgeBase
+from skills.file_integrity import FileIntegrityMonitor
 from core.neural_brain import NeuralBrain
 
 class AIAgent:
@@ -22,15 +23,21 @@ class AIAgent:
         self.env_auditor = EnvAuditor()
         self.reporter = ReportGenerator()
         self.kb = KnowledgeBase()
+        self.fim = FileIntegrityMonitor()
         self.brain = NeuralBrain()
 
     def process_command(self, command):
-        # 1. Neyron düşünmə analizi
         mind = self.brain.evaluate(command)
         thought_output = mind["thought_chain"] + "\n" + "-"*50
         
         intent = mind["intent"]
         cmd = command.lower().strip()
+
+        # 1. FIM (Fayl Bütövlüyü Monitorinqi)
+        if intent == "FIM" or "fim" in cmd:
+            if "baseline" in cmd or "baza" in cmd:
+                return f"{thought_output}\n" + self.fim.create_baseline(".")
+            return f"{thought_output}\n" + self.fim.check_integrity(".")
 
         # 2. Öyrənmə / Ingestion
         if intent == "LEARN" or any(cmd.startswith(w) for w in ["oyren", "öyrən"]):
@@ -50,7 +57,7 @@ class AIAgent:
             report_file = self.scanner.save_json_report(findings, files)
             return f"{thought_output}\n🛡️ Skan tamamlandı! {len(findings)} zəiflik tapıldı. Hesabat: `{report_file}`"
 
-        # 4. Düzəliş
+        # 4. Düzəliş (Fixer)
         if intent == "FIX":
             if os.path.exists("scan_report.json"):
                 with open("scan_report.json", "r", encoding="utf-8") as rf:
@@ -73,4 +80,4 @@ class AIAgent:
         if kb_match:
             return f"{thought_output}\n🔍 [Öyrənilmiş Yaddaşdan Alınan Cavab]:\n{kb_match}"
 
-        return f"{thought_output}\n🤖 [SI-GUARD Agent]: Əmr tam anlaşılamadı. Mövcud biliklər siyahısı üçün 'biliklər' yazın."
+        return f"{thought_output}\n🤖 [SI-GUARD Agent]: Əmr tam anlaşılamadı. 'fim baseline' və ya 'fim yoxla' yazın."
