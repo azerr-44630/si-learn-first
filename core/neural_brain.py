@@ -5,11 +5,13 @@ class NeuralBrain:
     def __init__(self):
         self.neurons = {
             "SCAN": ["skan", "scan", "zəiflik", "zeiflik", "vulnerability", "audit"],
+            "DEEP_SCAN": ["dərin", "derin", "ast", "analiz", "deep", "sintaksis"],
+            "HONEYPOT": ["tələ", "tele", "honeypot", "trap", "saxta port"],
             "FIX": ["düzəlt", "duzelt", "fix", "patch", "yamaq"],
             "LEARN": ["öyrən", "oyren", "ingest", "oxu", "yaddaş"],
             "LOG": ["log", "ip", "brute", "attack", "hücum", "giriş"],
             "REPORT": ["hesabat", "report", "html"],
-            "FIM": ["fim", "bütövlük", "butovluk", "integrity", "hash", "heş", "fayl yoxla"],
+            "FIM": ["fim", "bütövlük", "butovluk", "integrity", "hash", "heş"],
             "KNOWLEDGE_QUERY": ["nədir", "nedir", "necə", "nece", "haqqında", "soru", "axtar"]
         }
 
