@@ -35,7 +35,29 @@ class AIAgent:
         thought_output = mind["thought_chain"] + "\n" + "-"*50
         
         intent = mind["intent"]
+        target = mind.get("target", ".")
         cmd = command.lower().strip()
+
+        # Makro-Plan İcrası (Çoxlu-addımlı avtonom reaksiya)
+        if intent == "MACRO_PLAN":
+            results = [thought_output]
+            for step in mind["plan_steps"]:
+                if step == "FIM":
+                    results.append("🔍 [Addım 1]: " + self.fim.check_integrity(target))
+                elif step == "FIM_BASELINE":
+                    results.append("📸 [Addım 1]: " + self.fim.create_baseline(target))
+                elif step == "SCAN":
+                    findings, files, _ = self.scanner.run_scan(target)
+                    results.append(f"🛡️ [Addım 2]: SAST Skan tamamlandı ({len(findings)} zəiflik tapıldı).")
+                elif step == "DEEP_SCAN":
+                    issues = self.deep_analyzer.analyze_file("core/ai_agent.py")
+                    results.append(f"🔬 [Addım 3]: AST Dərin Skan tamamlandı ({len(issues)} xəbərdarlıq).")
+                elif step == "LOG":
+                    log_res = self.log_analyzer.analyze_log_file("logs/access.log")
+                    results.append("📊 [Addım 4]: Log Analizi tamamlandı.")
+                elif step == "HONEYPOT_START":
+                    results.append("🍯 [Addım 2]: " + self.honeypot.start())
+            return "\n\n".join(results)
 
         # 1. Honeypot (Tələ Modulu)
         if intent == "HONEYPOT":
@@ -43,20 +65,18 @@ class AIAgent:
                 return f"{thought_output}\n" + self.honeypot.start()
             return f"{thought_output}\n" + self.honeypot.check_traps()
 
-        # 2. Dərin Kod Analizi (AST - Gemini-siz)
+        # 2. Dərin Kod Analizi (AST)
         if intent == "DEEP_SCAN":
-            parts = command.split()
-            target_file = parts[-1] if len(parts) > 1 and os.path.exists(parts[-1]) else "core/ai_agent.py"
-            issues = self.deep_analyzer.analyze_file(target_file)
+            issues = self.deep_analyzer.analyze_file(target if target != "." else "core/ai_agent.py")
             if not issues:
-                return f"{thought_output}\n🔬 [AST Dərin Analiz]: `{target_file}` faylında kritik zəiflik tapılmadı."
-            return f"{thought_output}\n🔬 [AST Dərin Analiz - `{target_file}`]:\n" + "\n".join(issues)
+                return f"{thought_output}\n🔬 [AST Dərin Analiz]: `{target}` faylında kritik zəiflik tapılmadı."
+            return f"{thought_output}\n🔬 [AST Dərin Analiz - `{target}`]:\n" + "\n".join(issues)
 
         # 3. FIM (Fayl Bütövlüyü)
         if intent == "FIM":
             if "baseline" in cmd or "baza" in cmd:
-                return f"{thought_output}\n" + self.fim.create_baseline(".")
-            return f"{thought_output}\n" + self.fim.check_integrity(".")
+                return f"{thought_output}\n" + self.fim.create_baseline(target)
+            return f"{thought_output}\n" + self.fim.check_integrity(target)
 
         # 4. Öyrənmə / KnowledgeBase
         if intent == "LEARN" or any(cmd.startswith(w) for w in ["oyren", "öyrən"]):
@@ -68,11 +88,7 @@ class AIAgent:
 
         # 5. SAST Skan
         if intent == "SCAN":
-            target_path = "."
-            parts = [p for p in command.split() if os.path.exists(p)]
-            if parts:
-                target_path = parts[0]
-            findings, files, errors = self.scanner.run_scan(target_path)
+            findings, files, errors = self.scanner.run_scan(target)
             report_file = self.scanner.save_json_report(findings, files)
             return f"{thought_output}\n🛡️ Skan tamamlandı! {len(findings)} zəiflik tapıldı. Hesabat: `{report_file}`"
 
@@ -86,9 +102,7 @@ class AIAgent:
 
         # 7. Log Analizi
         if intent == "LOG":
-            parts = command.split()
-            log_file = parts[-1] if len(parts) > 1 and os.path.exists(parts[-1]) else "logs/access.log"
-            return f"{thought_output}\n" + self.log_analyzer.analyze_log_file(log_file)
+            return f"{thought_output}\n" + self.log_analyzer.analyze_log_file("logs/access.log")
 
         # 8. Hesabat
         if intent == "REPORT":
